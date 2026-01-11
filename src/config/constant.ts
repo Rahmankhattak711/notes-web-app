@@ -1,4 +1,4 @@
 export const jwtConstants = {
-  secret:
-    'DO NOT USE THIS VALUE. INSTEAD, CREATE A COMPLEX SECRET AND KEEP IT SAFE OUTSIDE OF THE SOURCE CODE.',
+  accessSecret: process.env.JWT_ACCESS_SECRET || 'default_access_secret',
+  refreshSecret: process.env.JWT_REFRESH_SECRET || 'default_refresh_secret',
 };
