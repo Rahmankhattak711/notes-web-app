@@ -1,16 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { jwtConstants } from './config/constant';
-import { SignUpAuthDto } from './dto/signup.auth.dto';
+import { jwtConstants } from '../config/constant';
 import { LoginAuthDto } from './dto/login.auth.dto';
+import { SignUpAuthDto } from './dto/signup.auth.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private prisma: PrismaService,
-    private jwtService: JwtService,
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
   ) {}
   async signUp(createAuthDto: SignUpAuthDto) {
     const existingUser = await this.prisma.user.findUnique({
@@ -19,7 +19,7 @@ export class AuthService {
       },
     });
     if (existingUser) {
-      throw new Error('User with this email already exists');
+      throw new ConflictException('User with this email already exists');
     }
     const hashedPassword = await bcrypt.hash(createAuthDto.password, 10);
     const newUser = await this.prisma.user.create({
@@ -54,7 +54,7 @@ export class AuthService {
     );
 
     if (!comparePassword) {
-      throw new Error('Invalid credentials');
+      throw new ConflictException('Invalid credentials');
     }
 
     const accessToken = this.jwtService.signAsync(
@@ -77,6 +77,12 @@ export class AuthService {
       },
       { secret: jwtConstants.secret, expiresIn: '7d' },
     );
+
+    await this.prisma.refreshToken.deleteMany({
+      where: {
+        userId: findUser.id,
+      },
+    });
 
     await this.prisma.refreshToken.create({
       data: {
