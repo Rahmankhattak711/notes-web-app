@@ -1,16 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { jwtConstants } from './config/constant';
-import { SignUpAuthDto } from './dto/signup.auth.dto';
+import { jwtConstants } from '../config/constant';
 import { LoginAuthDto } from './dto/login.auth.dto';
+import { SignUpAuthDto } from './dto/signup.auth.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private prisma: PrismaService,
-    private jwtService: JwtService,
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
   ) {}
   async signUp(createAuthDto: SignUpAuthDto) {
     const existingUser = await this.prisma.user.findUnique({
@@ -19,7 +23,7 @@ export class AuthService {
       },
     });
     if (existingUser) {
-      throw new Error('User with this email already exists');
+      throw new ConflictException('User with this email already exists');
     }
     const hashedPassword = await bcrypt.hash(createAuthDto.password, 10);
     const newUser = await this.prisma.user.create({
@@ -38,57 +42,56 @@ export class AuthService {
   }
 
   async login(loginAuthDto: LoginAuthDto) {
-    const findUser = await this.prisma.user.findUnique({
-      where: {
-        email: loginAuthDto.email,
-      },
+    const user = await this.prisma.user.findUnique({
+      where: { email: loginAuthDto.email },
     });
 
-    if (!findUser) {
-      throw new Error('User not found');
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
     }
 
-    const comparePassword = await bcrypt.compare(
+    const isPasswordValid = await bcrypt.compare(
       loginAuthDto.password,
-      findUser.password,
+      user.password,
     );
 
-    if (!comparePassword) {
-      throw new Error('Invalid credentials');
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
     }
 
-    const accessToken = this.jwtService.signAsync(
-      {
-        id: findUser.id,
-        email: findUser.email,
-        username: findUser.username,
-      },
-      {
-        secret: jwtConstants.secret,
-        expiresIn: '1h',
-      },
-    );
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      username: user.username,
+    };
 
-    const refreshToken = this.jwtService.signAsync(
-      {
-        id: findUser.id,
-        email: findUser.email,
-        username: findUser.username,
-      },
-      { secret: jwtConstants.secret, expiresIn: '7d' },
-    );
+    const accessToken = await this.jwtService.signAsync(payload, {
+      secret: jwtConstants.accessSecret,
+      expiresIn: '15m',
+    });
+
+    const refreshToken = await this.jwtService.signAsync(payload, {
+      secret: jwtConstants.refreshSecret,
+      expiresIn: '7d',
+    });
+
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId: user.id },
+    });
 
     await this.prisma.refreshToken.create({
       data: {
-        token: await refreshToken,
-        userId: findUser.id,
+        token: hashedRefreshToken,
+        userId: user.id,
       },
     });
 
     return {
       message: 'Login successful',
-      accessToken: await accessToken,
-      refreshToken: await refreshToken,
+      accessToken,
+      refreshToken,
     };
   }
 }
