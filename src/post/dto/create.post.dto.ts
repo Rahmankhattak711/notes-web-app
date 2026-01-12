@@ -13,3 +13,16 @@ export class CreatePostDto {
   @IsBoolean()
   published?: boolean;
 }
+
+export class UpdatePostDto {
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  content?: string;
+  @IsOptional()
+  @IsBoolean()
+  published?: boolean;
+}

@@ -6,7 +6,7 @@ import {
   MinLength,
 } from 'class-validator';
 
-enum Role {
+export enum Role {
   ADMIN = 'ADMIN',
   USER = 'USER',
 }
